@@ -2,7 +2,8 @@
 CC = gcc
 
 # Flags
-CFLAGS = -std=c11 -Wall -Wextra
+EXTRA_CFLAGS = 
+CFLAGS = -std=c11 -Wall -Wextra $(EXTRA_CFLAGS)
 TINY_LDFLAGS = -lm
 CG_LDFLAGS = -lm -lglfw -lGL -lGLEW
 
