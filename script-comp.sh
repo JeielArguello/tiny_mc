@@ -10,8 +10,8 @@ for compiler in "${compiler_array[@]}"; do
         for i in {16..20}; do 
             k=$((2**i));
             for j in {0..3}; do 
-                echo "PHOTONS=${k} O=${j}";
-                make clean && make CPPFLAGS="-DPHOTONS=${k}" EXTRA_CFLAGS="-O${j} ${flags}" headless
+                echo "PHOTONS=${k} O=${j} Compiler=${compiler} Flags=${flags}";
+                make clean && make CC="${compiler}" CPPFLAGS="-DPHOTONS=${k}" EXTRA_CFLAGS="-O${j} ${flags}" headless
                 perf stat -o temp.txt ./headless
                 # Extraer estadísticas y agregar al archivo CSV
                 awk -v photons=${k} -v opt=${j} -v compiler=${compiler} -v flags="-O${j} ${flags}" '
