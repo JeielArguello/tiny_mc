@@ -3,15 +3,15 @@
 # Crear o vaciar el archivo CSV
 echo "PHOTONS,O,Compiler,Flags,Task-clock,Context-switches,CPU-migrations,Page-faults,Cycles,Instructions,Branches,Branch-misses" > stats.csv
 
-flags_array=("" "-march=native" "-funroll-loops" "-march=native -funroll-loops")
+flags_array=("" "-march=native" "-funroll-all-loops" "-march=native -funroll-loops")
 compiler_array=("gcc" "clang")
 for compiler in "${compiler_array[@]}"; do
     for flags in "${flags_array[@]}"; do
-        for i in {16..20}; do 
+        for i in {17..21}; do 
             k=$((2**i));
             for j in {0..3}; do 
-                echo "PHOTONS=${k} O=${j}";
-                make clean && make CPPFLAGS="-DPHOTONS=${k}" EXTRA_CFLAGS="-O${j} ${flags}" headless
+                echo "PHOTONS=${k} O=${j}" compiling with ${compiler} ${flags};
+                make clean && make CC="${compiler}" CPPFLAGS="-DPHOTONS=${k}" EXTRA_CFLAGS="-O${j} ${flags}" headless
                 perf stat -o temp.txt ./headless
                 # Extraer estadísticas y agregar al archivo CSV
                 awk -v photons=${k} -v opt=${j} -v compiler=${compiler} -v flags="-O${j} ${flags}" '
