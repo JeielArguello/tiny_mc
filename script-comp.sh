@@ -3,8 +3,9 @@
 # Crear o vaciar el archivo CSV
 echo "PHOTONS,O,Compiler,Flags,Task-clock,Context-switches,CPU-migrations,Page-faults,Cycles,Instructions,Branches,Branch-misses" > stats.csv
 
+source /opt/intel/oneapi/setvars.sh
 flags_array=("" "-march=native" "-funroll-all-loops" "-march=native -funroll-loops")
-compiler_array=("gcc" "clang")
+compiler_array=("gcc" "clang" "icx")
 for compiler in "${compiler_array[@]}"; do
     for flags in "${flags_array[@]}"; do
         for i in {17..21}; do 
