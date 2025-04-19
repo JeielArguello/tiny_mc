@@ -4,7 +4,7 @@
 
 #include "params.h"
 
-static uint32_t xorshift32(uint32_t *state) {
+static inline uint32_t xorshift32(uint32_t* restrict state) {
     uint32_t x = *state;
     x ^= x << 13;  // Desplazamiento a la izquierda y XOR
     x ^= x >> 17;  // Desplazamiento a la derecha y XOR
@@ -13,7 +13,7 @@ static uint32_t xorshift32(uint32_t *state) {
     return x;
 }
 
-void photon(float* heats, float* heats_squared)
+void photon(float* restrict heats, float* restrict heats_squared)
 {
     const float albedo = MU_S / (MU_S + MU_A);
     const float shells_per_mfp = 1e4 / MICRONS_PER_SHELL / (MU_A + MU_S);
@@ -28,6 +28,7 @@ void photon(float* heats, float* heats_squared)
     float w = 1.0f;
     float weight = 1.0f;
 
+    #pragma omp simd
     for (;;) {
         float t = -logf(xorshift32(&state) / (float)UINT32_MAX ); /* move */
         x += t * u;

@@ -3,7 +3,7 @@ CC = gcc
 
 # Flags
 EXTRA_CFLAGS = 
-CFLAGS = -std=c11 -Wall -Wextra $(EXTRA_CFLAGS)
+CFLAGS = -std=c11 -Wall -Wextra -ftree-vectorize -funsafe-math-optimizations -ffast-math $(EXTRA_CFLAGS)
 TINY_LDFLAGS = -lm
 CG_LDFLAGS = -lm -lglfw -lGL -lGLEW
 
