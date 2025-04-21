@@ -2,9 +2,19 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <immintrin.h>
+#include <xmmintrin.h>
+#include <smmintrin.h>
 #include <stdio.h>
 
 #include "params.h"
+
+
+#ifdef _ICX    // Si se usa el compilador Intel, utiliza _mm256_log_ps
+    #define LOG_FUNCTION(x) _mm256_log_ps(x)
+#else
+    // Si no es Intel, utiliza log_vector
+    #define LOG_FUNCTION(x) log_vector(x)
+#endif
 
 /* static inline uint32_t xorshift32(uint32_t* restrict state) {
     uint32_t x = *state;
@@ -120,7 +130,7 @@ void photon(float* restrict heats, float* restrict heats_squared){
     __m256 mask_vivo = minus_one;
 
     for (;;){
-        __m256 log = log_vector(_mm256_div_ps(xorshift32_avx(&state), int_max));  
+        __m256 log = LOG_FUNCTION(_mm256_div_ps(xorshift32_avx(&state), int_max));  
         __m256 t = _mm256_mul_ps(minus_one, log); /* move */
         
 

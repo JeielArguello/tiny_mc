@@ -12,7 +12,14 @@ for compiler in "${compiler_array[@]}"; do
             k=$((2**i));
             for j in {0..3}; do 
                 echo "PHOTONS=${k} Compiler=${compiler} Flags=${flags}";
-                make clean && make CC="${compiler}" CPPFLAGS="-DPHOTONS=${k}" EXTRA_CFLAGS="-O${j} ${flags}" headless
+
+                if [ "$compiler" == "icx" ]; then
+                    var_icx="-D_ICX=1"
+                else
+                    var_icx=""
+                fi
+                
+                make clean && make CC="${compiler}" CPPFLAGS="-DPHOTONS=${k} $var_icx" EXTRA_CFLAGS="-O${j} ${flags}" headless
                 
                 # Ejecutar perf stat y capturar la salida
                 perf_output=$(perf stat -x, -e task-clock,context-switches,cpu-migrations,page-faults,cycles,instructions,branches,branch-misses ./headless 2>&1)
