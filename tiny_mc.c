@@ -45,7 +45,7 @@ int main(void)
     double start = wtime();
     // simulation
     #pragma omp simd
-    for (unsigned int i = 0; i < PHOTONS; ++i) {
+    for (unsigned int i = 0; i < PHOTONS; i= i+8) {
         photon(heat, heat2);
     }
     // stop timer
