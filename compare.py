@@ -12,14 +12,14 @@ def calculate_photons_per_task_clock(file_path):
     return results
 
 # Cargar datos de ambos archivos
-stats = calculate_photons_per_task_clock('stats.csv')
-stats_pc_opt = calculate_photons_per_task_clock('stats-PC-OPT.csv')
+stats = calculate_photons_per_task_clock('stats-atom-simd.csv')
+stats_pc_opt = calculate_photons_per_task_clock('stats-atom.csv')
 
 # Comparar resultados
 for key in stats:
     if key in stats_pc_opt:
         stats_value = stats[key]
         stats_pc_opt_value = stats_pc_opt[key]
-        better = "stats" if stats_value > stats_pc_opt_value else "stats-PC-OPT"
+        better = "vectorizada" if stats_value > stats_pc_opt_value else "normal"
         improvement = stats_value / stats_pc_opt_value  # Calcular el aumento relativo
-        print(f"{key}: stats={stats_value:.2f}, stats-PC-OPT={stats_pc_opt_value:.2f} -> {better}, improvement={improvement:.2f}x")
+        print(f"{key}: vectorizada={stats_value:.2f}, normal={stats_pc_opt_value:.2f} -> {better}, improvement={improvement:.2f}x")
