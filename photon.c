@@ -109,12 +109,21 @@ void photon(float* restrict heats, float* restrict heats_squared){
     const float albedo = MU_S / (MU_S + MU_A);
     const float shells_per_mfp = 1e4 / MICRONS_PER_SHELL / (MU_A + MU_S);
     __m256 shells_per_mfp_vec = _mm256_set1_ps(shells_per_mfp);
+    
     // Tomo 8 semillas para los valores random
     __m256i state = _mm256_set_epi32(rand(), rand(), rand(), rand(), rand(), rand(), rand(), rand()); // Initialize RNG state
 
+    // vectores que utilizo seguido
     __m256 zero = _mm256_set1_ps(0.0f);
+    __m256 zero_one = _mm256_set1_ps(0.1f);
     __m256 one = _mm256_set1_ps(1.0f);
     __m256 two = _mm256_set1_ps(2.0f);
+    __m256 int_max = _mm256_set1_ps((float)UINT32_MAX);
+    __m256 minus_one = _mm256_set1_ps(-1.0f);
+    __m256 shell_max = _mm256_set1_ps(SHELLS - 1);
+    __m256 albedo_vec = _mm256_set1_ps(albedo);
+    __m256 minus_albedo_vec = _mm256_set1_ps(1.0f - albedo);
+
     // Variables para 8 fotones
     __m256 x = zero;
     __m256 y = zero;
@@ -123,13 +132,13 @@ void photon(float* restrict heats, float* restrict heats_squared){
     __m256 v = zero;
     __m256 w = one;
     __m256 weight = one;
-
-    // Valor INT_MAX en vector
-    __m256 int_max = _mm256_set1_ps((float)UINT32_MAX);
-    __m256 minus_one = _mm256_set1_ps(-1.0f);
+    
+    // Vector que dice que foton sigue vivo
     __m256 mask_vivo = minus_one;
 
     for (;;){
+        // Calculo el tiempo de absorcion
+        // se utiliza LOG_FUNCTION para el caso de Intel
         __m256 log = LOG_FUNCTION(_mm256_div_ps(xorshift32_avx(&state), int_max));  
         __m256 t = _mm256_mul_ps(minus_one, log); /* move */
         
@@ -138,28 +147,33 @@ void photon(float* restrict heats, float* restrict heats_squared){
         y = _mm256_add_ps(y, _mm256_mul_ps(t, v));
         z = _mm256_add_ps(z, _mm256_mul_ps(t, w));
 
+        // calculo shell usando la reciproca de la raiz cuadrada
         __m256 n = _mm256_add_ps(_mm256_mul_ps(x, x), _mm256_add_ps(_mm256_mul_ps(y, y), _mm256_mul_ps(z, z))); /* shell */
         __m256 shell_sqrt = _mm256_rsqrt_ps(n);
         __m256 shell = _mm256_mul_ps(_mm256_mul_ps(shell_sqrt,n), shells_per_mfp_vec); /* absorb */
 
-        shell = _mm256_min_ps(shell, _mm256_set1_ps(SHELLS - 1)); // Asegurarse de que no exceda el límite
+        shell = _mm256_min_ps(shell, shell_max); // Asegurarse de que no exceda el límite
+        // convierto a entero
         __m256i shell_int = _mm256_cvttps_epi32(shell); 
         
+        // tomo los indices del vector shells
         int indices[8];
         _mm256_storeu_si256((__m256i*)indices, shell_int);
 
-        __m256 contribution_heats =_mm256_mul_ps(_mm256_set1_ps(1.0f - albedo), weight);
+        // Calculo el peso de cada foton
+        __m256 contribution_heats =_mm256_mul_ps(minus_albedo_vec, weight);
         contribution_heats = _mm256_and_ps(contribution_heats, mask_vivo);
-        __m256 contribution_heats_squared = _mm256_mul_ps(_mm256_set1_ps(1.0f - albedo), _mm256_mul_ps(_mm256_set1_ps(1.0f - albedo), _mm256_mul_ps(weight, weight))); /* add up squares */
+        __m256 contribution_heats_squared = _mm256_mul_ps(minus_albedo_vec, _mm256_mul_ps(minus_albedo_vec, _mm256_mul_ps(weight, weight))); /* add up squares */
         contribution_heats_squared = _mm256_and_ps(contribution_heats_squared, mask_vivo); 
 
 
-
+        // guardo la contribucion de cada foton
         float contribution_heats_index[8];
         _mm256_storeu_ps(contribution_heats_index, contribution_heats);
         float contribution_heats_squared_index[8];
         _mm256_storeu_ps(contribution_heats_squared_index, contribution_heats_squared);
 
+        // sumo la contribucion de cada foton a su shell correspondiente
         for (int i = 0; i < 8; i++) {
             
             int index = indices[i]; 
@@ -167,9 +181,13 @@ void photon(float* restrict heats, float* restrict heats_squared){
             heats_squared[index] = heats_squared[index] + contribution_heats_squared_index[i]; /* add up squares */
         }
         
-        weight = _mm256_mul_ps(weight, _mm256_set1_ps(albedo));        
+        // Calculo el nuevo peso
+        weight = _mm256_mul_ps(weight, albedo_vec);        
 
         __m256 xi1, xi2;
+        
+        // utilizo una mascara para que calcule las nuevas direcciones
+        // solo si el foton debe cambiar de direccion
         __m256 mask  = _mm256_cmp_ps( one , one, _CMP_EQ_OS);
       
         do{
@@ -181,7 +199,9 @@ void photon(float* restrict heats, float* restrict heats_squared){
             
             __m256 temp = _mm256_add_ps(_mm256_mul_ps(xi1,xi1), _mm256_mul_ps(xi2,xi2));
             
+            // agrego los cambios temporales que no cumplen con la condicion
             t = _mm256_blendv_ps (t,temp, mask);
+            // actualizo la mascara
             mask = _mm256_cmp_ps(t, one, _CMP_LE_OQ);
 
 
@@ -192,26 +212,33 @@ void photon(float* restrict heats, float* restrict heats_squared){
 
         __m256 rest_u =_mm256_div_ps( _mm256_sub_ps(one, _mm256_mul_ps(u, u)), t);
                 
-
+        // Calculo las nuevas direcciones usando la reciproca de la raiz cuadrada
         v =_mm256_mul_ps(xi1, _mm256_mul_ps( _mm256_rsqrt_ps(rest_u),rest_u));
         w =_mm256_mul_ps(xi2, _mm256_mul_ps( _mm256_rsqrt_ps(rest_u),rest_u));
     
         // Ruleta Rusa
+        // si algun foton tiene un peso menor a 0.001f deberia entrar al if
         __m256 mask_weight = _mm256_cmp_ps(weight, _mm256_set1_ps(0.001f), _CMP_LT_OQ);
+       
+        // la condicion != 0x00 significa que al menos un foton tiene peso menor a 0.001f
         if (_mm256_movemask_ps(mask_weight) != 0x00) {
             
-            
+            //hago la ruleta rusa
             __m256 rand_vals_roulette = _mm256_div_ps(xorshift32_avx(&state), int_max);
-            __m256 mask_eliminado = _mm256_cmp_ps(rand_vals_roulette, _mm256_set1_ps(0.1f), _CMP_GT_OQ);
+            __m256 roulette = _mm256_cmp_ps(rand_vals_roulette, zero_one, _CMP_GT_OQ);
+            
+            
+            // elimino los fotones que no pasaron la ruleta rusa y que tienen peso menor a 0.001f
+            __m256 mask_eliminado = _mm256_and_ps(roulette, mask_weight);
             mask_vivo = _mm256_andnot_ps(mask_eliminado, mask_vivo);
 
-
+            // si la mascara es cero significa que todos los fotones fueron eliminados
             if (_mm256_movemask_ps(mask_vivo) == 0x00) {
                 break;
             }
            
-           
-            __m256 updated_weight = _mm256_div_ps(weight, _mm256_set1_ps(0.1f));
+           // actualizo el peso de los fotones que no fueron eliminados
+            __m256 updated_weight = _mm256_div_ps(weight, zero_one);
             weight = _mm256_blendv_ps(weight, updated_weight, mask_weight);
 
         }
