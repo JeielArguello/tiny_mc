@@ -9,12 +9,29 @@
 #include "params.h"
 
 
+# define M_PI 3.14159265358979323846	
+
 #ifdef _ICX    // Si se usa el compilador Intel, utiliza _mm256_log_ps
     #define LOG_FUNCTION(x) _mm256_log_ps(x)
 #else
     // Si no es Intel, utiliza log_vector
     #define LOG_FUNCTION(x) log_vector(x)
 #endif
+
+#ifdef _ICX    // Si se usa el compilador Intel, utiliza _mm256_cos_ps
+    #define COS_FUNCTION(x) _mm256_cos_ps(x)
+#else
+    // Si no es Intel, utiliza cos_vector
+    #define COS_FUNCTION(x) cos_vector(x)
+#endif
+
+#ifdef _ICX    // Si se usa el compilador Intel, utiliza _mm256_sin_ps
+    #define SIN_FUNCTION(x) _mm256_sin_ps(x)
+#else
+    // Si no es Intel, utiliza cos_vector
+    #define SIN_FUNCTION(x) sin_vector(x)
+#endif
+
 
 /* static inline uint32_t xorshift32(uint32_t* restrict state) {
     uint32_t x = *state;
@@ -56,16 +73,17 @@ void photon(float* restrict heats, float* restrict heats_squared)
         heats_squared[shell] += (1.0f - albedo) * (1.0f - albedo) * weight * weight; // add up squares 
         weight *= albedo;
 
-        // New direction, rejection method
-        float xi1, xi2;
-        do {
-            xi1 = 2.0f * xorshift32(&state) / (float)UINT32_MAX - 1.0f;
-            xi2 = 2.0f * xorshift32(&state) / (float)UINT32_MAX - 1.0f;
-            t = xi1 * xi1 + xi2 * xi2;
-        } while (1.0f < t);
-        u = 2.0f * t - 1.0f;
-        v = xi1 * sqrtf((1.0f - u * u) / t);
-        w = xi2 * sqrtf((1.0f - u * u) / t);
+        // New direction, polar coordinates (isotropic 3D)
+        float xi1 = xorshift32(&state) / (float)UINT32_MAX;          // Uniform in [0,1)
+        float xi2 = xorshift32(&state) / (float)UINT32_MAX;          // Uniform in [0,1)
+
+        float phi = 2.0f * M_PI * xi1;                               // Azimuthal angle in [0, 2π)
+        float costheta = 2.0f * xi2 - 1.0f;                          // cos(θ) in [-1, 1]
+        float sintheta = sqrtf(1.0f - costheta * costheta);
+
+        u = sintheta * cosf(phi);  // x
+        v = sintheta * sinf(phi);  // y
+        w = costheta;              // z
 
         if (weight < 0.001f) { // roulette 
             if (xorshift32(&state) / (float)UINT32_MAX > 0.1f)
@@ -94,9 +112,37 @@ static __m256 log_vector(__m256 x) {
     // Calcular el logaritmo de cada elemento de manera escalar
     for (int i = 0; i < 8; ++i) {
         if(elements[i] <= 0.0f) {
-            elements[i] = rand()/(float)UINT32_MAX;
+            elements[i] = rand()/(float)RAND_MAX;
         }
         elements[i] = logf(elements[i]);
+    }
+
+    // Cargar los resultados de nuevo en un vector __m256
+    return _mm256_loadu_ps(elements);
+}
+
+static __m256 cos_vector(__m256 x) {
+    // Almacenar los elementos del vector en un arreglo
+    float elements[8];
+    _mm256_storeu_ps(elements, x);
+
+    // Calcular el coseno de cada elemento de manera escalar
+    for (int i = 0; i < 8; ++i) {
+        elements[i] = cosf(elements[i]);
+    }
+
+    // Cargar los resultados de nuevo en un vector __m256
+    return _mm256_loadu_ps(elements);
+}
+
+static __m256 sin_vector(__m256 x) {
+    // Almacenar los elementos del vector en un arreglo
+    float elements[8];
+    _mm256_storeu_ps(elements, x);
+
+    // Calcular el seno de cada elemento de manera escalar
+    for (int i = 0; i < 8; ++i) {
+        elements[i] = sinf(elements[i]);
     }
 
     // Cargar los resultados de nuevo en un vector __m256
@@ -110,19 +156,24 @@ void photon(float* restrict heats, float* restrict heats_squared){
     const float shells_per_mfp = 1e4 / MICRONS_PER_SHELL / (MU_A + MU_S);
     __m256 shells_per_mfp_vec = _mm256_set1_ps(shells_per_mfp);
     
+    float local_heats[SHELLS] = {0};
+    float local_heats_sq[SHELLS] = {0};
+
     // Tomo 8 semillas para los valores random
     __m256i state = _mm256_set_epi32(rand(), rand(), rand(), rand(), rand(), rand(), rand(), rand()); // Initialize RNG state
 
     // vectores que utilizo seguido
     __m256 zero = _mm256_set1_ps(0.0f);
     __m256 zero_one = _mm256_set1_ps(0.1f);
+    __m256 zero_zero_one = _mm256_set1_ps(0.001f);
     __m256 one = _mm256_set1_ps(1.0f);
     __m256 two = _mm256_set1_ps(2.0f);
-    __m256 int_max = _mm256_set1_ps((float)UINT32_MAX);
+    __m256 int_max = _mm256_set1_ps((float)INT32_MAX);
     __m256 minus_one = _mm256_set1_ps(-1.0f);
     __m256 shell_max = _mm256_set1_ps(SHELLS - 1);
     __m256 albedo_vec = _mm256_set1_ps(albedo);
     __m256 minus_albedo_vec = _mm256_set1_ps(1.0f - albedo);
+    __m256 pi_vec = _mm256_set1_ps(M_PI);
 
     // Variables para 8 fotones
     __m256 x = zero;
@@ -177,48 +228,29 @@ void photon(float* restrict heats, float* restrict heats_squared){
         for (int i = 0; i < 8; i++) {
             
             int index = indices[i]; 
-            heats[index] = heats[index] + contribution_heats_index[i]; /* add up heats */
-            heats_squared[index] = heats_squared[index] + contribution_heats_squared_index[i]; /* add up squares */
+            local_heats[index] = local_heats[index] + contribution_heats_index[i]; /* add up heats */
+            local_heats_sq[index] = local_heats_sq[index] + contribution_heats_squared_index[i]; /* add up squares */
         }
         
         // Calculo el nuevo peso
-        weight = _mm256_mul_ps(weight, albedo_vec);        
-
-        __m256 xi1, xi2;
+        weight = _mm256_mul_ps(weight, albedo_vec);  
         
-        // utilizo una mascara para que calcule las nuevas direcciones
-        // solo si el foton debe cambiar de direccion
-        __m256 mask  = _mm256_cmp_ps( one , one, _CMP_EQ_OS);
-      
-        do{
-            xi1 = _mm256_mul_ps(two, _mm256_div_ps(xorshift32_avx(&state), int_max));
-            xi1 = _mm256_sub_ps(xi1, one);
+        // New direction, polar coordinates (isotropic 3D)
+        __m256 xi1 = _mm256_div_ps(xorshift32_avx(&state), int_max); // Uniform in [0,1)
+        __m256 xi2 = _mm256_div_ps(xorshift32_avx(&state), int_max); // Uniform in [0,1)
+        
+        __m256 phi = _mm256_mul_ps(_mm256_mul_ps(two, pi_vec), xi1); 
+        __m256 costheta = _mm256_sub_ps(_mm256_mul_ps(two, xi2), one); // cos(θ) in [-1, 1]
+        __m256 sinres = _mm256_sub_ps(one, _mm256_mul_ps(costheta, costheta));
+        __m256 sintheta = _mm256_mul_ps(_mm256_rsqrt_ps(sinres),sinres); // sin(θ) in [0, 1]
+        
+        u = _mm256_mul_ps(sintheta, COS_FUNCTION(phi));  // x
+        v = _mm256_mul_ps(sintheta, SIN_FUNCTION(phi));  // y
+        w = costheta;              // z
 
-            xi2 = _mm256_mul_ps(two, _mm256_div_ps(xorshift32_avx(&state), int_max));
-            xi2 = _mm256_sub_ps(xi2, one);
-            
-            __m256 temp = _mm256_add_ps(_mm256_mul_ps(xi1,xi1), _mm256_mul_ps(xi2,xi2));
-            
-            // agrego los cambios temporales que no cumplen con la condicion
-            t = _mm256_blendv_ps (t,temp, mask);
-            // actualizo la mascara
-            mask = _mm256_cmp_ps(t, one, _CMP_LE_OQ);
-
-
-        } while (_mm256_testc_ps(mask, minus_one ) != 0);
-
-        u = _mm256_mul_ps(two, t);
-        u = _mm256_sub_ps(u, one);
-
-        __m256 rest_u =_mm256_div_ps( _mm256_sub_ps(one, _mm256_mul_ps(u, u)), t);
-                
-        // Calculo las nuevas direcciones usando la reciproca de la raiz cuadrada
-        v =_mm256_mul_ps(xi1, _mm256_mul_ps( _mm256_rsqrt_ps(rest_u),rest_u));
-        w =_mm256_mul_ps(xi2, _mm256_mul_ps( _mm256_rsqrt_ps(rest_u),rest_u));
-    
         // Ruleta Rusa
         // si algun foton tiene un peso menor a 0.001f deberia entrar al if
-        __m256 mask_weight = _mm256_cmp_ps(weight, _mm256_set1_ps(0.001f), _CMP_LT_OQ);
+        __m256 mask_weight = _mm256_cmp_ps(weight, zero_zero_one, _CMP_LT_OQ);
        
         // la condicion != 0x00 significa que al menos un foton tiene peso menor a 0.001f
         if (_mm256_movemask_ps(mask_weight) != 0x00) {
@@ -242,6 +274,11 @@ void photon(float* restrict heats, float* restrict heats_squared){
             weight = _mm256_blendv_ps(weight, updated_weight, mask_weight);
 
         }
+    }
+
+    for (int i = 0; i < SHELLS; ++i) {
+        heats[i]        += local_heats[i];
+        heats_squared[i] += local_heats_sq[i];
     }
 
 }
