@@ -156,12 +156,16 @@ void photon(float* restrict heats, float* restrict heats_squared){
     const float shells_per_mfp = 1e4 / MICRONS_PER_SHELL / (MU_A + MU_S);
     __m256 shells_per_mfp_vec = _mm256_set1_ps(shells_per_mfp);
     
+    float local_heats[SHELLS] = {0};
+    float local_heats_sq[SHELLS] = {0};
+
     // Tomo 8 semillas para los valores random
     __m256i state = _mm256_set_epi32(rand(), rand(), rand(), rand(), rand(), rand(), rand(), rand()); // Initialize RNG state
 
     // vectores que utilizo seguido
     __m256 zero = _mm256_set1_ps(0.0f);
     __m256 zero_one = _mm256_set1_ps(0.1f);
+    __m256 zero_zero_one = _mm256_set1_ps(0.001f);
     __m256 one = _mm256_set1_ps(1.0f);
     __m256 two = _mm256_set1_ps(2.0f);
     __m256 int_max = _mm256_set1_ps((float)INT32_MAX);
@@ -224,13 +228,14 @@ void photon(float* restrict heats, float* restrict heats_squared){
         for (int i = 0; i < 8; i++) {
             
             int index = indices[i]; 
-            heats[index] = heats[index] + contribution_heats_index[i]; /* add up heats */
-            heats_squared[index] = heats_squared[index] + contribution_heats_squared_index[i]; /* add up squares */
+            local_heats[index] = local_heats[index] + contribution_heats_index[i]; /* add up heats */
+            local_heats_sq[index] = local_heats_sq[index] + contribution_heats_squared_index[i]; /* add up squares */
         }
         
         // Calculo el nuevo peso
-        weight = _mm256_mul_ps(weight, albedo_vec);        
-
+        weight = _mm256_mul_ps(weight, albedo_vec);  
+        
+        // New direction, polar coordinates (isotropic 3D)
         __m256 xi1 = _mm256_div_ps(xorshift32_avx(&state), int_max); // Uniform in [0,1)
         __m256 xi2 = _mm256_div_ps(xorshift32_avx(&state), int_max); // Uniform in [0,1)
         
@@ -245,7 +250,7 @@ void photon(float* restrict heats, float* restrict heats_squared){
 
         // Ruleta Rusa
         // si algun foton tiene un peso menor a 0.001f deberia entrar al if
-        __m256 mask_weight = _mm256_cmp_ps(weight, _mm256_set1_ps(0.001f), _CMP_LT_OQ);
+        __m256 mask_weight = _mm256_cmp_ps(weight, zero_zero_one, _CMP_LT_OQ);
        
         // la condicion != 0x00 significa que al menos un foton tiene peso menor a 0.001f
         if (_mm256_movemask_ps(mask_weight) != 0x00) {
@@ -269,6 +274,11 @@ void photon(float* restrict heats, float* restrict heats_squared){
             weight = _mm256_blendv_ps(weight, updated_weight, mask_weight);
 
         }
+    }
+
+    for (int i = 0; i < SHELLS; ++i) {
+        heats[i]        += local_heats[i];
+        heats_squared[i] += local_heats_sq[i];
     }
 
 }
