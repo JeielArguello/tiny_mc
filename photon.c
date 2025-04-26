@@ -4,6 +4,8 @@
 
 #include "params.h"
 
+# define M_PI 3.14159265358979323846	
+
 static inline uint32_t xorshift32(uint32_t* restrict state) {
     uint32_t x = *state;
     x ^= x << 13;  // Desplazamiento a la izquierda y XOR
@@ -43,16 +45,17 @@ void photon(float* restrict heats, float* restrict heats_squared)
         heats_squared[shell] += (1.0f - albedo) * (1.0f - albedo) * weight * weight; /* add up squares */
         weight *= albedo;
 
-        /* New direction, rejection method */
-        float xi1, xi2;
-        do {
-            xi1 = 2.0f * xorshift32(&state) / (float)UINT32_MAX - 1.0f;
-            xi2 = 2.0f * xorshift32(&state) / (float)UINT32_MAX - 1.0f;
-            t = xi1 * xi1 + xi2 * xi2;
-        } while (1.0f < t);
-        u = 2.0f * t - 1.0f;
-        v = xi1 * sqrtf((1.0f - u * u) / t);
-        w = xi2 * sqrtf((1.0f - u * u) / t);
+        // New direction, polar coordinates (isotropic 3D)
+        float xi1 = xorshift32(&state) / (float)UINT32_MAX;          // Uniform in [0,1)
+        float xi2 = xorshift32(&state) / (float)UINT32_MAX;          // Uniform in [0,1)
+
+        float phi = 2.0f * M_PI * xi1;                               // Azimuthal angle in [0, 2π)
+        float costheta = 2.0f * xi2 - 1.0f;                          // cos(θ) in [-1, 1]
+        float sintheta = sqrtf(1.0f - costheta * costheta);
+
+        u = sintheta * cosf(phi);  // x
+        v = sintheta * sinf(phi);  // y
+        w = costheta;              // z
 
         if (weight < 0.001f) { /* roulette */
             if (xorshift32(&state) / (float)UINT32_MAX > 0.1f)
