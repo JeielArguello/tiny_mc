@@ -15,6 +15,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <omp.h>
 
 char t1[] = "Tiny Monte Carlo by Scott Prahl (http://omlc.ogi.edu)";
 char t2[] = "1 W Point Source Heating in Infinite Isotropic Scattering Medium";
@@ -44,8 +45,8 @@ int main(void)
     // start timer
     double start = wtime();
     // simulation
-    #pragma omp simd
-    for (unsigned int i = 0; i < PHOTONS; i= i+8) {
+   #pragma omp parallel for simd reduction(+:heat[:SHELLS], heat2[:SHELLS])
+   for (unsigned int i = 0; i < PHOTONS; i= i+8) {
         photon(heat, heat2);
     }
     // stop timer
@@ -60,8 +61,7 @@ int main(void)
     printf("# [microns]\t[W/cm^3]\tError\n");
     float t = 4.0f * M_PI * powf(MICRONS_PER_SHELL, 3.0f) * PHOTONS / 1e12;
 
-    #pragma omp simd
-    for (unsigned int i = 0; i < SHELLS - 1; ++i) {
+   for (unsigned int i = 0; i < SHELLS - 1; ++i) {
         printf("%6.0f\t%12.5f\t%12.5f\n", i * (float)MICRONS_PER_SHELL,
                heat[i] / t / (i * i + i + 1.0 / 3.0),
                sqrt(heat2[i] - heat[i] * heat[i] / PHOTONS) / t / (i * i + i + 1.0f / 3.0f));

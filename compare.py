@@ -13,8 +13,8 @@ def calculate_photons_per_task_clock(file_path):
     return results
 
 # Cargar datos de ambos archivos
-stats = calculate_photons_per_task_clock('stats.csv')
-stats_pc_opt = calculate_photons_per_task_clock('stats-PC-OPT.csv')
+stats = calculate_photons_per_task_clock('stats-atom-new.csv')
+stats_pc_opt = calculate_photons_per_task_clock('stats-atom.csv')
 
 # Variables para calcular el mayor aumento y promedios
 max_improvement = 0
