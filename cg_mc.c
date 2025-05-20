@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -10,9 +11,12 @@
 #define PHOTON_CAP 1 << 16
 #define MAX_PHOTONS_PER_FRAME 20
 
-static float heats[SHELLS];
-static float _heats_squared[SHELLS];
+static float heats[SHELLS * FLOATS_PER_CACHE_LINE];
+static float _heats_squared[SHELLS * FLOATS_PER_CACHE_LINE];
+static float local_heats[SHELLS];
+static float local_heats_sq[SHELLS];
 static int remaining_photons = PHOTON_CAP;
+uint32_t seed;
 
 // clang-format off
 // covers the entire screen with 2 triangles
@@ -80,15 +84,23 @@ void update(void)
         --remaining_photons;
         --remaining_photons_in_frame;
 
-        photon(heats, _heats_squared);
+        photon(heats, _heats_squared, &seed);
     }
+    
+    for (int i = 0; i < SHELLS; ++i) {
+        local_heats[i]        = heats[i*FLOATS_PER_CACHE_LINE];
+        local_heats_sq[i]     = _heats_squared[i*FLOATS_PER_CACHE_LINE];
+    }
+    
 
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(heats), heats);
+    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(local_heats), local_heats);
 }
 
 int main(void)
 {
     glfwInit();
+    srand(SEED);
+    seed = SEED + rand();
 
     glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
@@ -142,7 +154,7 @@ int main(void)
     glGenBuffers(1, &ssbo);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(heats), heats, GL_DYNAMIC_DRAW);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(local_heats), local_heats, GL_DYNAMIC_DRAW);
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();

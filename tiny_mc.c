@@ -16,6 +16,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <omp.h>
 
 char t1[] = "Tiny Monte Carlo by Scott Prahl (http://omlc.ogi.edu)";
@@ -25,8 +26,8 @@ char t3[] = "CPU version, adapted for PEAGPGPU by Gustavo Castellano"
 
 
 // global state, heat and heat square in each shell
-static float *heat;
-static float *heat2;
+static float heat[SHELLS * FLOATS_PER_CACHE_LINE];
+static float heat2[SHELLS * FLOATS_PER_CACHE_LINE];
 
 
 /***
@@ -36,27 +37,23 @@ static float *heat2;
 int main(void)
 {
 
-    // allocate memory
-    heat = (float *)malloc(SHELLS * sizeof(float)*FLOATS_PER_CACHE_LINE);
-    heat2 = (float *)malloc(SHELLS * sizeof(float)*FLOATS_PER_CACHE_LINE);
-    if (heat == NULL || heat2 == NULL) {
-        fprintf(stderr, "Error: malloc failed\n");
-        return 1;
-    }
+    
     // heading
     printf("# %s\n# %s\n# %s\n", t1, t2, t3);
     printf("# Scattering = %8.3f/cm\n", MU_S);
     printf("# Absorption = %8.3f/cm\n", MU_A);
     printf("# Photons    = %8d\n#\n", PHOTONS);
 
-    // configure RNG
-    srand(SEED);
     // start timer
     double start = wtime();
     // simulation
-   #pragma omp parallel for simd reduction(+:heat[0:SHELLS*FLOATS_PER_CACHE_LINE], heat2[0:SHELLS*FLOATS_PER_CACHE_LINE])
-   for (unsigned int i = 0; i < PHOTONS; i= i+8) {
-        photon(heat, heat2);
+    #pragma omp parallel
+    {
+        unsigned int seed = SEED + omp_get_thread_num();
+        #pragma omp for simd reduction(+:heat[0:SHELLS*FLOATS_PER_CACHE_LINE], heat2[0:SHELLS*FLOATS_PER_CACHE_LINE])
+        for (unsigned int i = 0; i < PHOTONS; i = i + 8) {
+            photon(heat, heat2, &seed);
+        }
     }
     // stop timer
     double end = wtime();
@@ -75,7 +72,7 @@ int main(void)
                heat[i*FLOATS_PER_CACHE_LINE] / t / (i * i + i + 1.0 / 3.0),
                sqrt(heat2[i*FLOATS_PER_CACHE_LINE] - heat[i*FLOATS_PER_CACHE_LINE] * heat[i*FLOATS_PER_CACHE_LINE] / PHOTONS) / t / (i * i + i + 1.0f / 3.0f));
     }
-    printf("# extra\t%12.5f\n", heat[SHELLS - FLOATS_PER_CACHE_LINE] / PHOTONS);
+    printf("# extra\t%12.5f\n", heat[SHELLS - FLOATS_PER_CACHE_LINE-1] / PHOTONS);
 
     return 0;
 }

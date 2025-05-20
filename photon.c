@@ -5,6 +5,7 @@
 #include <xmmintrin.h>
 #include <smmintrin.h>
 #include <stdio.h>
+#include <omp.h>
 
 #include "params.h"
 
@@ -42,6 +43,15 @@ static inline __m256 xorshift32_avx(__m256i* restrict state) {
     __m256i unsigned_x = _mm256_and_si256(x, _mm256_set1_epi32(0x7FFFFFFF));
 
     return _mm256_cvtepi32_ps(unsigned_x);
+}
+
+static inline uint32_t xorshift(uint32_t *state) {
+    uint32_t x = *state;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    *state = x;
+    return x;
 }
 
 static __m256 log_vector(__m256 x) {
@@ -91,7 +101,7 @@ static __m256 sin_vector(__m256 x) {
 
 
 
-void photon(float* restrict heats, float* restrict heats_squared){
+void photon(float* restrict heats, float* restrict heats_squared, uint32_t * seed) {
     const float albedo = MU_S / (MU_S + MU_A);
     const float shells_per_mfp = 1e4 / MICRONS_PER_SHELL / (MU_A + MU_S);
     __m256 shells_per_mfp_vec = _mm256_set1_ps(shells_per_mfp);
@@ -100,7 +110,7 @@ void photon(float* restrict heats, float* restrict heats_squared){
     float local_heats_sq[SHELLS] = {0};
 
     // Tomo 8 semillas para los valores random
-    __m256i state = _mm256_set_epi32(rand(), rand(), rand(), rand(), rand(), rand(), rand(), rand()); // Initialize RNG state
+    __m256i state = _mm256_set_epi32(xorshift(seed), xorshift(seed), xorshift(seed), xorshift(seed), xorshift(seed), xorshift(seed), xorshift(seed), xorshift(seed)); // Initialize RNG state
 
     // vectores que utilizo seguido
     __m256 zero = _mm256_set1_ps(0.0f);
