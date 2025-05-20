@@ -3,10 +3,14 @@
 # Crear o vaciar el archivo CSV
 echo "PHOTONS,Compiler,Flags,Task-clock,Context-switches,CPU-migrations,Page-faults,Cycles,Instructions,Branches,Branch-misses" > stats.csv
 
-source /opt/intel/oneapi/setvars.sh
 flags_array=("" "-march=native" "-funroll-loops" "-march=native -funroll-loops")
 compiler_array=("gcc" "clang" "icx")
 for compiler in "${compiler_array[@]}"; do
+    if [ "$compiler" == "icx" ]; then
+        source /opt/intel/oneapi/setvars.sh
+    elif [ "$compiler" == "clang" ]; then
+        source /opt/AMD/aocc-compiler-4.1.0/setenv_AOCC.sh
+    fi
     for flags in "${flags_array[@]}"; do
         for i in {17..21}; do 
             k=$((2**i));
@@ -14,12 +18,14 @@ for compiler in "${compiler_array[@]}"; do
                 echo "PHOTONS=${k} Compiler=${compiler} Flags=${flags}";
 
                 if [ "$compiler" == "icx" ]; then
-                    var_icx="-D_ICX=1"
+                    var_icx="-D_ICX=1 -qopenmp"
+                    openmp_flags="-qopenmp"
                 else
-                    var_icx=""
+                    var_icx="-fopenmp"
+                    openmp_flags="-fopenmp"
                 fi
                 
-                make clean && make CC="${compiler}" CPPFLAGS="-DPHOTONS=${k} $var_icx" EXTRA_CFLAGS="-O${j} ${flags}" headless
+                make clean && make CC="${compiler}" CPPFLAGS="-DPHOTONS=${k} $var_icx" EXTRA_CFLAGS="-O${j} ${flags}" TINY_LDFLAGS="-lm $openmp_flags" headless
                 
                 # Ejecutar perf stat y capturar la salida
                 perf_output=$(perf stat -x, -e task-clock,context-switches,cpu-migrations,page-faults,cycles,instructions,branches,branch-misses ./headless 2>&1)
