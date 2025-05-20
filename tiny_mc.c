@@ -49,11 +49,14 @@ int main(void)
     // simulation
     #pragma omp parallel
     {
+        double t0 = omp_get_wtime();
         unsigned int seed = SEED + omp_get_thread_num();
         #pragma omp for simd reduction(+:heat[0:SHELLS*FLOATS_PER_CACHE_LINE], heat2[0:SHELLS*FLOATS_PER_CACHE_LINE])
         for (unsigned int i = 0; i < PHOTONS; i = i + 8) {
             photon(heat, heat2, &seed);
         }
+        double t1 = omp_get_wtime();
+        printf("Thread %d time: %f s\n", omp_get_thread_num(), t1 - t0);
     }
     // stop timer
     double end = wtime();
