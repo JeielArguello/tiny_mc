@@ -51,7 +51,7 @@ int main(void)
     {
         double t0 = omp_get_wtime();
         unsigned int seed = SEED + omp_get_thread_num();
-        #pragma omp for simd reduction(+:heat[0:SHELLS*FLOATS_PER_CACHE_LINE], heat2[0:SHELLS*FLOATS_PER_CACHE_LINE])
+        #pragma omp for simd reduction(+:heat[0:SHELLS*FLOATS_PER_CACHE_LINE], heat2[0:SHELLS*FLOATS_PER_CACHE_LINE]) schedule(dynamic)
         for (unsigned int i = 0; i < PHOTONS; i = i + 8) {
             photon(heat, heat2, &seed);
         }
