@@ -26,3 +26,12 @@
 #define SEED (time(NULL)) // random seed
 #endif
 
+#ifndef CACHE_LINE_SIZE
+#define CACHE_LINE_SIZE 64 // cache line size in bytes
+#endif
+
+#ifndef FLOATS_PER_CACHE_LINE
+#define FLOATS_PER_CACHE_LINE (CACHE_LINE_SIZE / sizeof(float))
+#endif
+
+

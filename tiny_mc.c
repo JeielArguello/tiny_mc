@@ -7,6 +7,7 @@
 
 #define _XOPEN_SOURCE 500 // M_PI
 
+
 #include "params.h"
 #include "photon.h"
 #include "wtime.h"
@@ -24,8 +25,8 @@ char t3[] = "CPU version, adapted for PEAGPGPU by Gustavo Castellano"
 
 
 // global state, heat and heat square in each shell
-static float heat[SHELLS];
-static float heat2[SHELLS];
+static float *heat;
+static float *heat2;
 
 
 /***
@@ -34,6 +35,14 @@ static float heat2[SHELLS];
 
 int main(void)
 {
+
+    // allocate memory
+    heat = (float *)malloc(SHELLS * sizeof(float)*FLOATS_PER_CACHE_LINE);
+    heat2 = (float *)malloc(SHELLS * sizeof(float)*FLOATS_PER_CACHE_LINE);
+    if (heat == NULL || heat2 == NULL) {
+        fprintf(stderr, "Error: malloc failed\n");
+        return 1;
+    }
     // heading
     printf("# %s\n# %s\n# %s\n", t1, t2, t3);
     printf("# Scattering = %8.3f/cm\n", MU_S);
@@ -45,7 +54,7 @@ int main(void)
     // start timer
     double start = wtime();
     // simulation
-   #pragma omp parallel for simd reduction(+:heat[:SHELLS], heat2[:SHELLS])
+   #pragma omp parallel for simd reduction(+:heat[0:SHELLS*FLOATS_PER_CACHE_LINE], heat2[0:SHELLS*FLOATS_PER_CACHE_LINE])
    for (unsigned int i = 0; i < PHOTONS; i= i+8) {
         photon(heat, heat2);
     }
@@ -63,10 +72,10 @@ int main(void)
 
    for (unsigned int i = 0; i < SHELLS - 1; ++i) {
         printf("%6.0f\t%12.5f\t%12.5f\n", i * (float)MICRONS_PER_SHELL,
-               heat[i] / t / (i * i + i + 1.0 / 3.0),
-               sqrt(heat2[i] - heat[i] * heat[i] / PHOTONS) / t / (i * i + i + 1.0f / 3.0f));
+               heat[i*FLOATS_PER_CACHE_LINE] / t / (i * i + i + 1.0 / 3.0),
+               sqrt(heat2[i*FLOATS_PER_CACHE_LINE] - heat[i*FLOATS_PER_CACHE_LINE] * heat[i*FLOATS_PER_CACHE_LINE] / PHOTONS) / t / (i * i + i + 1.0f / 3.0f));
     }
-    printf("# extra\t%12.5f\n", heat[SHELLS - 1] / PHOTONS);
+    printf("# extra\t%12.5f\n", heat[SHELLS - FLOATS_PER_CACHE_LINE] / PHOTONS);
 
     return 0;
 }

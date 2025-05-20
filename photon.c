@@ -217,8 +217,8 @@ void photon(float* restrict heats, float* restrict heats_squared){
     }
 
     for (int i = 0; i < SHELLS; ++i) {
-        heats[i]        += local_heats[i];
-        heats_squared[i] += local_heats_sq[i];
+        heats[i*FLOATS_PER_CACHE_LINE]        += local_heats[i];
+        heats_squared[i*FLOATS_PER_CACHE_LINE] += local_heats_sq[i];
     }
 
 }
