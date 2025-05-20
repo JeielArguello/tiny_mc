@@ -1,20 +1,20 @@
 import csv
 from collections import defaultdict
 
-def calculate_photons_per_task_clock(file_path):
+def get_photons_per_sec(file_path):
     results = {}
     with open(file_path, 'r') as file:
         reader = csv.DictReader(file)
         for row in reader:
             photons = int(row['PHOTONS'])
-            task_clock = float(row['Task-clock'])
+            photons_per_sec = float(row['Photons-per-sec'])
             key = (row['Compiler'], row['Flags'], photons)
-            results[key] = photons / task_clock
+            results[key] = photons_per_sec
     return results
 
 # Cargar datos de ambos archivos
-stats = calculate_photons_per_task_clock('stats-PC-PAR.csv')
-stats_pc_opt = calculate_photons_per_task_clock('stats-PC-OPT.csv')
+stats = get_photons_per_sec('stats-PC-PAR.csv')
+stats_pc_opt = get_photons_per_sec('stats-PC-simd.csv')
 
 # Variables para calcular el mayor aumento y promedios
 max_improvement = 0

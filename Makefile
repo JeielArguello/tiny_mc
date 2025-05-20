@@ -4,7 +4,7 @@ CC = icx
 # Flags
 EXTRA_CFLAGS = -O3 -funroll-loops
 CFLAGS = -std=c11 -Wall -Wextra -march=native -ftree-vectorize -funsafe-math-optimizations -ffast-math $(EXTRA_CFLAGS)
-TINY_LDFLAGS = -lm -fopenmp 
+TINY_LDFLAGS = -lm 
 CG_LDFLAGS = -lm -lglfw -lGL -lGLEW
 
 TARGETS = headless head
