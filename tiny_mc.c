@@ -44,6 +44,7 @@ int main(void)
     // start timer
     double start = wtime();
     // simulation
+    #pragma omp simd
     for (unsigned int i = 0; i < PHOTONS; ++i) {
         photon(heat, heat2);
     }
@@ -58,6 +59,8 @@ int main(void)
     printf("# Radius\tHeat\n");
     printf("# [microns]\t[W/cm^3]\tError\n");
     float t = 4.0f * M_PI * powf(MICRONS_PER_SHELL, 3.0f) * PHOTONS / 1e12;
+
+    #pragma omp simd
     for (unsigned int i = 0; i < SHELLS - 1; ++i) {
         printf("%6.0f\t%12.5f\t%12.5f\n", i * (float)MICRONS_PER_SHELL,
                heat[i] / t / (i * i + i + 1.0 / 3.0),
