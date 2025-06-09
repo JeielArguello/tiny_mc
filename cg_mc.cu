@@ -1,5 +1,9 @@
 #include <assert.h>
 #include <stdio.h>
+#include <curand.h>
+#include <curand_kernel.h>
+#include <stdio.h>
+#include <cuda_runtime.h>
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -9,6 +13,11 @@
 
 #define PHOTON_CAP 1 << 16
 #define MAX_PHOTONS_PER_FRAME 20
+
+#define CUDA_CALL(x) err = x; \
+    if (err != cudaSuccess) { \
+    fprintf(stderr, "CUDA error: %s\n", cudaGetErrorString(err));\
+    exit(EXIT_FAILURE);}
 
 static float heats[SHELLS];
 static float _heats_squared[SHELLS];
@@ -80,10 +89,9 @@ void update(void)
         --remaining_photons;
         --remaining_photons_in_frame;
 
-        photon(heats, _heats_squared);
+        
     }
-
-    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(heats), heats);
+    
 }
 
 int main(void)
@@ -144,10 +152,44 @@ int main(void)
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
     glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(heats), heats, GL_DYNAMIC_DRAW);
 
+
+    cudaError_t err;
+    
+    float *d_heat, *d_heat2;
+    CUDA_CALL(cudaMalloc(&d_heat, SHELLS * sizeof(float)));
+    CUDA_CALL(cudaMalloc(&d_heat2, SHELLS * sizeof(float)));
+
+    dim3 grid(PHOTON_CAP / BLOCK_SIZE+1);
+    dim3 block(BLOCK_SIZE);
+
+    // initialize states
+    curandState *d_states;
+    CUDA_CALL(cudaMalloc(&d_states, grid.x * block.x * sizeof(curandState)));
+
+    init_curand<<<grid, block>>>(d_states, SEED);
+    err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("Error al lanzar el kernel init_curand: %s\n", cudaGetErrorString(err));
+    }
+    CUDA_CALL(cudaDeviceSynchronize());
+
+
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
         update();
+
+        photon<<<grid,block>>>(d_heat, d_heat2, d_states);
+        err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("Error al lanzar el kernel photon: %s\n", cudaGetErrorString(err));
+        }
+        CUDA_CALL(cudaDeviceSynchronize());
+
+        CUDA_CALL(cudaMemcpy(heats, d_heat, SHELLS * sizeof(float), cudaMemcpyDeviceToHost));
+        CUDA_CALL(cudaMemcpy(_heats_squared, d_heat2, SHELLS * sizeof(float), cudaMemcpyDeviceToHost));
+
+        glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(heats), heats);
 
         glClear(GL_COLOR_BUFFER_BIT);
         glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -160,4 +202,8 @@ int main(void)
     glDeleteProgram(program);
     glfwDestroyWindow(window);
     glfwTerminate();
+
+    cudaFree(d_states);
+    cudaFree(d_heat);
+    cudaFree(d_heat2);
 }
