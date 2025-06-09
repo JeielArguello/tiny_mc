@@ -52,8 +52,14 @@ int main(void)
     CUDA_CALL(cudaMalloc(&d_heat, SHELLS * sizeof(float)));
     CUDA_CALL(cudaMalloc(&d_heat2, SHELLS * sizeof(float)));
 
+
+    size_t free_mem, total_mem;
+    cudaMemGetInfo(&free_mem, &total_mem);
+    printf("Memoria GPU libre: %.2f MB / %.2f MB\n", free_mem / (1024.0 * 1024.0), total_mem / (1024.0 * 1024.0));
+    
     dim3 grid(PHOTONS / BLOCK_SIZE+1);
     dim3 block(BLOCK_SIZE);
+    printf("Reservando memoria para d_states: %zu bytes\n", grid.x * block.x * sizeof(curandState));
 
     // initialize states
     curandState *d_states;

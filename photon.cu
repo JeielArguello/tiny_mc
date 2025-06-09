@@ -44,9 +44,6 @@ __global__ void photon(float* heats, float* heats_squared, curandState* states) 
 
     uint32_t state = curand_uniform(&state_d)* UINT32_MAX;
     
-    
-    if (tid == 0) printf("\tThread %d: Initial state = %u\n", tid, state);
-
     float x = 0.0f, y = 0.0f, z = 0.0f;
     float u = 0.0f, v = 0.0f, w = 1.0f;
     float weight = 1.0f;
