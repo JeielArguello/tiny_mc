@@ -58,7 +58,7 @@ int main(void)
     printf("Memoria GPU libre: %.2f MB / %.2f MB\n", free_mem / (1024.0 * 1024.0), total_mem / (1024.0 * 1024.0));
     
     size_t batchSize = free_mem;
-    size_t photonsLeft = PHOTONS;
+    size_t photonsLeft = (PHOTONS + NUM_PHOTONS_PER_THREAD - 1) / NUM_PHOTONS_PER_THREAD;
     unsigned int currentBatch = (photonsLeft > batchSize) ? batchSize : photonsLeft;
     
     dim3 grid((currentBatch + BLOCK_SIZE -1) / BLOCK_SIZE);
