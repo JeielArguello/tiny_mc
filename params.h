@@ -31,6 +31,6 @@
 #endif
 
 #ifndef NUM_PHOTONS_PER_THREAD
-#define NUM_PHOTONS_PER_THREAD 16 // Number of photons per block
+#define NUM_PHOTONS_PER_THREAD 8// Number of photons per block
 #endif
 

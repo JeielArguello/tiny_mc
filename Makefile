@@ -3,7 +3,7 @@ CC = nvcc
 
 # Flags
 EXTRA_CFLAGS = -O3 
-CFLAGS = -std=c++14 -arch=sm_61 -Xcompiler "-Wall -Wextra" $(EXTRA_CFLAGS) -Wno-deprecated-gpu-targets
+CFLAGS = -std=c++14 -arch=sm_61 -Xcompiler "-Wall -Wextra" --ptxas-options=-v $(EXTRA_CFLAGS) -Wno-deprecated-gpu-targets
 TINY_LDFLAGS = -lm
 CG_LDFLAGS = -lm -lglfw -lGL -lGLEW
 
