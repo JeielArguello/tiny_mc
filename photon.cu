@@ -42,6 +42,16 @@ __global__ void photon(float* heats, float* heats_squared, curandState* states) 
     const float shells_per_mfp = 1e4 / MICRONS_PER_SHELL / (MU_A + MU_S);
     const float uint32_max = (float)UINT32_MAX;
 
+    
+    __shared__ float shared_heats[SHELLS];
+    __shared__ float shared_heats_squared[SHELLS];
+
+    if (threadIdx.x < SHELLS) {
+        shared_heats[threadIdx.x] = 0.0f;
+        shared_heats_squared[threadIdx.x] = 0.0f;
+    }
+    __syncthreads();
+
     for (size_t k=0; k<NUM_PHOTONS_PER_THREAD; ++k) {
         uint32_t state = curand_uniform(&state_d)* UINT32_MAX;
         
@@ -49,8 +59,8 @@ __global__ void photon(float* heats, float* heats_squared, curandState* states) 
         float u = 0.0f, v = 0.0f, w = 1.0f;
         float weight = 1.0f;
 
-        float local_heats[SHELLS] = {0};
-        float local_heats_squared[SHELLS] = {0};
+        //float local_heats[SHELLS] = {0};
+        //float local_heats_squared[SHELLS] = {0};
 
         for (;;) {
             float t = -__logf(xorshift32(&state) / uint32_max);
@@ -59,10 +69,13 @@ __global__ void photon(float* heats, float* heats_squared, curandState* states) 
             z += t * w;
 
             unsigned int shell = sqrtf(x * x + y * y + z * z) * shells_per_mfp;
-            if (shell > SHELLS - 1) shell = SHELLS - 1;
+            shell = min(shell,SHELLS - 1);
 
-            local_heats[shell] += one_minus_albedo * weight;
-            local_heats_squared[shell] += one_minus_albedo_sq * weight * weight;
+            atomicAdd(&shared_heats[shell], one_minus_albedo * weight);
+            //local_heats[shell] += one_minus_albedo * weight;
+            atomicAdd(&shared_heats_squared[shell], one_minus_albedo_sq * weight* weight);
+            //local_heats_squared[shell] += one_minus_albedo_sq * weight * weight;
+            
             weight *= albedo;
 
             float xi1 = xorshift32(&state) / uint32_max;
@@ -82,10 +95,12 @@ __global__ void photon(float* heats, float* heats_squared, curandState* states) 
             }
         }
 
-        for (unsigned int i = 0; i < SHELLS; ++i) {
-            atomicAdd(&heats[i], local_heats[i]);
-            atomicAdd(&heats_squared[i],local_heats_squared[i]);
-        }
         states[tid] = state_d;
+    }
+    __syncthreads();
+    // Accumulate results in shared memory
+    if (threadIdx.x < SHELLS) {
+        atomicAdd(&heats[threadIdx.x], shared_heats[threadIdx.x]);
+        atomicAdd(&heats_squared[threadIdx.x],shared_heats_squared[threadIdx.x]);
     }
 }

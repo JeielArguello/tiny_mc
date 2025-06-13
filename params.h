@@ -27,10 +27,10 @@
 #endif
 
 #ifndef BLOCK_SIZE
-#define BLOCK_SIZE 1024 // Number of threads per block
+#define BLOCK_SIZE 128 // Number of threads per block
 #endif
 
 #ifndef NUM_PHOTONS_PER_THREAD
-#define NUM_PHOTONS_PER_THREAD 32 // Number of photons per block
+#define NUM_PHOTONS_PER_THREAD 16 // Number of photons per block
 #endif
 

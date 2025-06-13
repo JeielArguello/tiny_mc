@@ -158,7 +158,7 @@ int main(void)
     float *d_heat, *d_heat2;
     CUDA_CALL(cudaMalloc(&d_heat, SHELLS * sizeof(float)));
     CUDA_CALL(cudaMalloc(&d_heat2, SHELLS * sizeof(float)));
-
+    size_t photon_size = PHOTON_CAP / NUM_PHOTONS_PER_THREAD +1;
     dim3 grid(PHOTON_CAP / BLOCK_SIZE+1);
     dim3 block(BLOCK_SIZE);
 
