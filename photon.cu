@@ -82,7 +82,7 @@ __global__ void photon(float* heats, float* heats_squared, curandState* states) 
             float xi2 = xorshift32(&state) / uint32_max;
             float phi = 2.0f * M_PI * xi1;
             float costheta = 2.0f * xi2 - 1.0f;
-            float sintheta = sqrtf(1.0f - costheta * costheta);
+            float sintheta = __fsqrt_rn(1.0f - costheta * costheta);
 
             u = sintheta * __cosf(phi);
             v = sintheta * __sinf(phi);

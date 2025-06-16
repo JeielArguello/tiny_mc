@@ -17,11 +17,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <omp.h>
+#include <curand_kernel.h>
+#include <cuda_runtime.h>
 
 #define CUDA_CALL(x) err = x; \
     if (err != cudaSuccess) { \
     fprintf(stderr, "CUDA error: %s\n", cudaGetErrorString(err));\
     exit(EXIT_FAILURE);}
+
+#define CUDA_EVENT_TIMING_START(start, stop) \
+    cudaEventCreate(&start);                 \
+    cudaEventCreate(&stop);                  \
+    cudaEventRecord(start, 0);
+
+#define CUDA_EVENT_TIMING_STOP(start, stop, elapsed_ms) \
+    cudaEventRecord(stop, 0);                           \
+    cudaEventSynchronize(stop);                         \
+    cudaEventElapsedTime(&elapsed_ms, start, stop);     \
+    cudaEventDestroy(start);                            \
+    cudaEventDestroy(stop);
+
 
 char t1[] = "Tiny Monte Carlo by Scott Prahl (http://omlc.ogi.edu)";
 char t2[] = "1 W Point Source Heating in Infinite Isotropic Scattering Medium";
@@ -61,8 +76,8 @@ int main(void)
     size_t photonsLeft = (PHOTONS + NUM_PHOTONS_PER_THREAD - 1) / NUM_PHOTONS_PER_THREAD;
     unsigned int currentBatch = (photonsLeft > batchSize) ? batchSize : photonsLeft;
     
-    dim3 grid((currentBatch + BLOCK_SIZE -1) / BLOCK_SIZE);
     dim3 block(BLOCK_SIZE);
+    dim3 grid((currentBatch + BLOCK_SIZE -1) / BLOCK_SIZE);
 
     printf("Reservando memoria para d_states: %zu bytes\n", grid.x * block.x * sizeof(curandState));
 
@@ -76,7 +91,11 @@ int main(void)
     }
     CUDA_CALL(cudaDeviceSynchronize());
     // start timer
-    double start = wtime();
+    cudaEvent_t start, stop;
+    float elapsed_ms;
+    CUDA_EVENT_TIMING_START(start, stop);
+
+    double start_time = wtime();
     while (photonsLeft > 0){
         // simulation
         photon<<<grid,block>>>(d_heat, d_heat2, d_states);
@@ -90,15 +109,19 @@ int main(void)
     }
     CUDA_CALL(cudaDeviceSynchronize());
     // stop timer
-    double end = wtime();
-    assert(start <= end);
-    double elapsed = end - start;
+    double end_time = wtime();
+    assert(start_time <= end_time);
+    double elapsed = end_time - start_time;
+    CUDA_EVENT_TIMING_STOP(start, stop, elapsed_ms);
 
     CUDA_CALL(cudaMemcpy(heat, d_heat, SHELLS * sizeof(float), cudaMemcpyDeviceToHost));
     CUDA_CALL(cudaMemcpy(heat2, d_heat2, SHELLS * sizeof(float), cudaMemcpyDeviceToHost));
-
+    printf("# CPU:\n");
     printf("# %lf seconds\n", elapsed);
     printf("# %lf K photons per second\n", 1e-3 * PHOTONS / elapsed);
+    printf("# GPU:\n");
+    printf("# %lf seconds\n", (elapsed_ms/ 1000.0f));
+    printf("# %lf K photons per second\n", 1e-3 * PHOTONS / (elapsed_ms/ 1000.0f));
     
     printf("# Radius\tHeat\n");
     printf("# [microns]\t[W/cm^3]\tError\n");
