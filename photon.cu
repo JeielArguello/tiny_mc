@@ -36,6 +36,7 @@ __global__ void photon(float* heats, float* heats_squared, curandState* states) 
     unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
     curandState state_d = states[tid];
 
+
     const float albedo = MU_S / (MU_S + MU_A);
     const float one_minus_albedo = 1.0f - albedo;
     const float one_minus_albedo_sq = one_minus_albedo * one_minus_albedo;
@@ -51,9 +52,9 @@ __global__ void photon(float* heats, float* heats_squared, curandState* states) 
         shared_heats_squared[threadIdx.x] = 0.0f;
     }
     __syncthreads();
-
+    
+    uint32_t state = curand_uniform(&state_d)* UINT32_MAX;
     for (size_t k=0; k<NUM_PHOTONS_PER_THREAD; ++k) {
-        uint32_t state = curand_uniform(&state_d)* UINT32_MAX;
         
         float x = 0.0f, y = 0.0f, z = 0.0f;
         float u = 0.0f, v = 0.0f, w = 1.0f;
@@ -68,7 +69,7 @@ __global__ void photon(float* heats, float* heats_squared, curandState* states) 
             y += t * v;
             z += t * w;
 
-            unsigned int shell = sqrtf(x * x + y * y + z * z) * shells_per_mfp;
+            unsigned int shell = __fsqrt_rn(x * x + y * y + z * z) * shells_per_mfp;
             shell = min(shell,SHELLS - 1);
 
             atomicAdd(&shared_heats[shell], one_minus_albedo * weight);
@@ -95,8 +96,8 @@ __global__ void photon(float* heats, float* heats_squared, curandState* states) 
             }
         }
 
-        states[tid] = state_d;
     }
+    states[tid] = state_d;
     __syncthreads();
     // Accumulate results in shared memory
     if (threadIdx.x < SHELLS) {
