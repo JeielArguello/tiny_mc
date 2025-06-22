@@ -67,47 +67,59 @@ int main(void)
     CUDA_CALL(cudaMalloc(&d_heat, SHELLS * sizeof(float)));
     CUDA_CALL(cudaMalloc(&d_heat2, SHELLS * sizeof(float)));
 
+    printf("------------------------------------------------------------------------\n");
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0);
+    printf("Multiprocesadores: %d\n", prop.multiProcessorCount);
+    printf("Máx hilos por multiprocesador: %d\n", prop.maxThreadsPerMultiProcessor);
+    printf("Máx hilos por bloque: %d\n", prop.maxThreadsPerBlock);
+    printf("------------------------------------------------------------------------\n");
+    int maxThreads = prop.multiProcessorCount * prop.maxThreadsPerMultiProcessor;
+
+
+
 
     size_t free_mem, total_mem;
     cudaMemGetInfo(&free_mem, &total_mem);
     printf("Memoria GPU libre: %.2f MB / %.2f MB\n", free_mem / (1024.0 * 1024.0), total_mem / (1024.0 * 1024.0));
     
-    size_t batchSize = free_mem;
-    size_t photonsLeft = (PHOTONS + NUM_PHOTONS_PER_THREAD - 1) / NUM_PHOTONS_PER_THREAD;
+    size_t batchSize = (free_mem*0.9); // - (maxThreads * sizeof(curandState));
+    size_t photonsLeft = ceil(PHOTONS  / NUM_PHOTONS_PER_THREAD);
     unsigned int currentBatch = (photonsLeft > batchSize) ? batchSize : photonsLeft;
     
     dim3 block(BLOCK_SIZE);
-    dim3 grid((currentBatch + BLOCK_SIZE -1) / BLOCK_SIZE);
+    dim3 grid(ceil((currentBatch  / BLOCK_SIZE)/sizeof(curandState)));
 
-    printf("Reservando memoria para d_states: %zu bytes\n", grid.x * block.x * sizeof(curandState));
+   
 
-    // initialize states
-    curandState *d_states;
-    CUDA_CALL(cudaMalloc(&d_states, grid.x * block.x * sizeof(curandState)));
-    init_curand<<<grid, block>>>(d_states, SEED);
-    err = cudaGetLastError();
-    if (err != cudaSuccess) {
-        printf("Error al lanzar el kernel init_curand: %s\n", cudaGetErrorString(err));
-    }
-    CUDA_CALL(cudaDeviceSynchronize());
     // start timer
     cudaEvent_t start, stop;
     float elapsed_ms;
     CUDA_EVENT_TIMING_START(start, stop);
-
     double start_time = wtime();
+
+
+
+
     while (photonsLeft > 0){
         // simulation
-        photon<<<grid,block>>>(d_heat, d_heat2, d_states);
+        photon<<<grid,block>>>(d_heat, d_heat2, SEED);
         err = cudaGetLastError();
         if (err != cudaSuccess) {
             printf("Error al lanzar el kernel photon: %s\n", cudaGetErrorString(err));
         }
         photonsLeft -= currentBatch;
         currentBatch = (photonsLeft > batchSize) ? batchSize : photonsLeft;
-        dim3 grid((currentBatch + BLOCK_SIZE -1) / BLOCK_SIZE);
+        dim3 grid(ceil((currentBatch / BLOCK_SIZE)/sizeof(curandState)));
     }
     CUDA_CALL(cudaDeviceSynchronize());
+
+
+
+
+
+
+
     // stop timer
     double end_time = wtime();
     assert(start_time <= end_time);
@@ -116,6 +128,11 @@ int main(void)
 
     CUDA_CALL(cudaMemcpy(heat, d_heat, SHELLS * sizeof(float), cudaMemcpyDeviceToHost));
     CUDA_CALL(cudaMemcpy(heat2, d_heat2, SHELLS * sizeof(float), cudaMemcpyDeviceToHost));
+
+
+
+
+
     printf("# CPU:\n");
     printf("# %lf seconds\n", elapsed);
     printf("# %lf K photons per second\n", 1e-3 * PHOTONS / elapsed);
@@ -134,7 +151,6 @@ int main(void)
     }
     printf("# extra\t%12.5f\n", heat[SHELLS - 1] / PHOTONS);
     
-    cudaFree(d_states);
     cudaFree(d_heat);
     cudaFree(d_heat2);
     return 0;

@@ -158,28 +158,18 @@ int main(void)
     float *d_heat, *d_heat2;
     CUDA_CALL(cudaMalloc(&d_heat, SHELLS * sizeof(float)));
     CUDA_CALL(cudaMalloc(&d_heat2, SHELLS * sizeof(float)));
-    size_t photon_size = PHOTON_CAP / NUM_PHOTONS_PER_THREAD +1;
-    dim3 grid(PHOTON_CAP / BLOCK_SIZE+1);
+    //unsigned long long photon_size = ceil(PHOTON_CAP / NUM_PHOTONS_PER_THREAD );
+    dim3 grid(ceil(PHOTON_CAP / BLOCK_SIZE));
     dim3 block(BLOCK_SIZE);
 
-    // initialize states
-    curandState *d_states;
-    CUDA_CALL(cudaMalloc(&d_states, grid.x * block.x * sizeof(curandState)));
-
-    init_curand<<<grid, block>>>(d_states, SEED);
-    err = cudaGetLastError();
-    if (err != cudaSuccess) {
-        printf("Error al lanzar el kernel init_curand: %s\n", cudaGetErrorString(err));
-    }
-    CUDA_CALL(cudaDeviceSynchronize());
-
+   
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
         update();
 
-        photon<<<grid,block>>>(d_heat, d_heat2, d_states);
+        photon<<<grid,block>>>(d_heat, d_heat2, SEED);
         err = cudaGetLastError();
         if (err != cudaSuccess) {
             printf("Error al lanzar el kernel photon: %s\n", cudaGetErrorString(err));
@@ -203,7 +193,6 @@ int main(void)
     glfwDestroyWindow(window);
     glfwTerminate();
 
-    cudaFree(d_states);
     cudaFree(d_heat);
     cudaFree(d_heat2);
 }
